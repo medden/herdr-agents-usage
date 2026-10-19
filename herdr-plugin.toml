@@ -1,0 +1,16 @@
+id = "simrog.agent-usage"
+name = "Agent Usage"
+version = "0.1.0"
+min_herdr_version = "0.9.0"
+description = "Subscription usage for every agent Omarchy tracks, in the herdr tab bar"
+platforms = ["linux"]
+
+[[actions]]
+id = "install"
+title = "Agent Usage: add tab-bar entry"
+command = ["python3", "install.py"]
+
+[[actions]]
+id = "uninstall"
+title = "Agent Usage: remove tab-bar entry"
+command = ["python3", "install.py", "--uninstall"]
