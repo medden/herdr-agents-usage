@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import math
 import os
 import subprocess
 import sys
@@ -30,8 +31,9 @@ STALE_AFTER = 600
 # Omarchy keeps the last numbers when the saved sign-in lapses and says so here.
 AUTH_STATUSES = {"Sign-in expired", "Waiting for auth"}
 
-DIM, YELLOW, RED, RESET = "\033[2m", "\033[33m", "\033[31m", "\033[0m"
-
+# Nerd Font Material icons: an empty circle, then circle-slice-1..8 filling clockwise.
+DIAL_EMPTY = "\U000F0766"
+DIAL_SLICES = [chr(code) for code in range(0xF0A9E, 0xF0AA6)]
 
 def parse_time(raw: str) -> dt.datetime | None:
   try:
@@ -60,41 +62,41 @@ def short_duration(seconds: float) -> str:
   return f"{hours // 24}d"
 
 
-def paint(text: str, code: str, color: bool) -> str:
-  return f"{code}{text}{RESET}" if color and code else text
+def dial(percent: float) -> str:
+  if percent <= 0:
+    return DIAL_EMPTY
+  # Any use shows at least one slice; only a full window shows the whole circle.
+  return DIAL_SLICES[min(8, max(1, math.ceil(percent * 8))) - 1]
 
 
-def format_limit(limit: dict, now: dt.datetime, color: bool) -> str:
+def format_limit(limit: dict, now: dt.datetime) -> str:
   percent = float(limit.get("percent") or 0)
   resets_at = parse_time(limit.get("resetsAt") or "")
   # A window whose reset has passed has started over, whatever the record says.
   if resets_at and resets_at <= now:
     percent, resets_at = 0.0, None
 
-  text = f"{short_label(limit.get('label', ''))} {round(percent * 100)}%"
+  # Half-up like the Omarchy panel's Math.round, not Python's round-half-even.
+  text = f"{dial(percent)} {short_label(limit.get('label', ''))} {math.floor(percent * 100 + 0.5)}%"
   # Only the near reset is worth the room; a weekly reset days away is noise.
   if resets_at and (resets_at - now).total_seconds() < 86400:
     text += f" ↻{short_duration((resets_at - now).total_seconds())}"
-
-  code = RED if percent >= 0.8 else YELLOW if percent >= 0.5 else DIM
-  return paint(text, code, color)
+  return text
 
 
-def format_agent(record: dict, now: dt.datetime, color: bool) -> str | None:
+def format_agent(record: dict, now: dt.datetime) -> str | None:
   agent = record.get("id") or "?"
   if record.get("usageStatusText") in AUTH_STATUSES:
-    return paint(f"{agent} login", RED, color)
+    return f"{agent} login"
 
   limits = [limit for limit in record.get("limits") or [] if isinstance(limit, dict)]
   if not limits:
     return None
 
+  body = " · ".join(format_limit(limit, now) for limit in limits)
   updated_at = parse_time(record.get("updatedAt") or "")
-  if updated_at is None or (now - updated_at).total_seconds() > STALE_AFTER:
-    # Old numbers are dimmed as a whole rather than coloured as if they were current.
-    body = " · ".join(format_limit(limit, now, color=False) for limit in limits)
-    return paint(f"{agent}* {body}", DIM, color)
-  return f"{agent} " + " · ".join(format_limit(limit, now, color) for limit in limits)
+  stale = updated_at is None or (now - updated_at).total_seconds() > STALE_AFTER
+  return f"{agent}{'*' if stale else ''} {body}"
 
 
 def load_records(usage_dir: Path, hidden: set[str]) -> list[dict]:
@@ -109,8 +111,8 @@ def load_records(usage_dir: Path, hidden: set[str]) -> list[dict]:
   return records
 
 
-def render(records: list[dict], now: dt.datetime, color: bool) -> str:
-  segments = [segment for record in records if (segment := format_agent(record, now, color))]
+def render(records: list[dict], now: dt.datetime) -> str:
+  segments = [segment for record in records if (segment := format_agent(record, now))]
   return " │ ".join(segments)
 
 
@@ -149,7 +151,6 @@ def refresh(agents: list[str], stamp: Path) -> None:
 
 def main(argv: list[str] | None = None) -> int:
   parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-  parser.add_argument("--color", action="store_true", help="colour segments with ANSI codes")
   parser.add_argument("--hide", default="", help="comma-separated agent ids to leave out")
   parser.add_argument("--no-refresh", action="store_true", help="never trigger an Omarchy refresh")
   parser.add_argument("--usage-dir", type=Path, default=USAGE_DIR, help=argparse.SUPPRESS)
@@ -163,7 +164,7 @@ def main(argv: list[str] | None = None) -> int:
     refresh(due, REFRESH_STAMP)
 
   # herdr shows the last stdout line; an empty one hides the entry.
-  print(render(records, now, args.color))
+  print(render(records, now))
   return 0
 
 

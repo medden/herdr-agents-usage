@@ -74,14 +74,16 @@ def uninstall(text: str, script: Path) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-  parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+  parser = argparse.ArgumentParser(
+    description=__doc__.splitlines()[0],
+    epilog="Any other options (e.g. --hide codex) are passed on to agent_usage.py.",
+  )
   parser.add_argument("--uninstall", action="store_true")
-  parser.add_argument("--args", default="", help="extra agent_usage.py arguments, e.g. '--color --hide codex'")
   parser.add_argument("--config", type=Path, default=CONFIG)
-  args = parser.parse_args(argv)
+  args, script_args = parser.parse_known_args(argv)
 
   text = args.config.read_text() if args.config.exists() else ""
-  new = uninstall(text, SCRIPT) if args.uninstall else install(text, SCRIPT, args.args)
+  new = uninstall(text, SCRIPT) if args.uninstall else install(text, SCRIPT, " ".join(script_args))
   if new == text:
     print(f"{args.config}: unchanged")
     return 0

@@ -36,9 +36,9 @@ class InstallTest(unittest.TestCase):
   def test_is_idempotent_and_updates_args(self):
     once = install.install(CONFIG, SCRIPT)
     self.assertEqual(install.install(once, SCRIPT), once)
-    entries = right(install.install(once, SCRIPT, "--color"))
+    entries = right(install.install(once, SCRIPT, "--hide codex"))
     self.assertEqual(len(entries), 3)
-    self.assertEqual(entries[-1]["command"], f"{SCRIPT} --color")
+    self.assertEqual(entries[-1]["command"], f"{SCRIPT} --hide codex")
 
   def test_uninstall_restores_original(self):
     self.assertEqual(install.uninstall(install.install(CONFIG, SCRIPT), SCRIPT), CONFIG)

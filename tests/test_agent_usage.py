@@ -9,6 +9,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import agent_usage as au
 
+EMPTY, S1, S2, S4 = au.DIAL_EMPTY, *(au.DIAL_SLICES[i] for i in (0, 1, 3))
+
 NOW = dt.datetime(2026, 10, 19, 13, 0, tzinfo=dt.timezone.utc)
 
 
@@ -32,42 +34,43 @@ def claude(session=0.19, weekly=0.06, updated=dt.timedelta(minutes=-1), **extra)
 
 class FormatTest(unittest.TestCase):
   def test_fresh_record(self):
-    self.assertEqual(au.render([claude()], NOW, color=False), "claude 5h 19% ↻1h20m · wk 6%")
+    self.assertEqual(au.render([claude()], NOW), f"claude {S2} 5h 19% ↻1h20m · {S1} wk 6%")
 
   def test_stale_record_is_marked(self):
-    line = au.render([claude(updated=dt.timedelta(minutes=-30))], NOW, color=False)
-    self.assertEqual(line, "claude* 5h 19% ↻1h20m · wk 6%")
+    line = au.render([claude(updated=dt.timedelta(minutes=-30))], NOW)
+    self.assertEqual(line, f"claude* {S2} 5h 19% ↻1h20m · {S1} wk 6%")
 
   def test_expired_sign_in_shows_login(self):
     record = claude(usageStatusText="Sign-in expired")
-    self.assertEqual(au.render([record], NOW, color=False), "claude login")
+    self.assertEqual(au.render([record], NOW), "claude login")
 
   def test_passed_reset_reads_zero(self):
     record = claude()
     record["limits"][0]["resetsAt"] = iso(dt.timedelta(minutes=-5))
-    self.assertEqual(au.render([record], NOW, color=False), "claude 5h 0% · wk 6%")
+    self.assertEqual(au.render([record], NOW), f"claude {EMPTY} 5h 0% · {S1} wk 6%")
 
   def test_agents_without_limits_are_skipped(self):
     codex = {"id": "codex", "ready": True, "limits": []}
     fireworks = {"id": "fireworks", "ready": False, "limits": [], "usageStatusText": "Fireworks unavailable"}
-    self.assertEqual(au.render([codex, fireworks], NOW, color=False), "")
+    self.assertEqual(au.render([codex, fireworks], NOW), "")
 
   def test_several_agents_are_joined(self):
     other = claude(session=0.5)
     other["id"] = "codex"
     self.assertEqual(
-      au.render([claude(), other], NOW, color=False),
-      "claude 5h 19% ↻1h20m · wk 6% │ codex 5h 50% ↻1h20m · wk 6%",
+      au.render([claude(), other], NOW),
+      f"claude {S2} 5h 19% ↻1h20m · {S1} wk 6% │ codex {S4} 5h 50% ↻1h20m · {S1} wk 6%",
     )
 
-  def test_colour_thresholds(self):
-    line = au.render([claude(session=0.85, weekly=0.55)], NOW, color=True)
-    self.assertIn(f"{au.RED}5h 85%", line)
-    self.assertIn(f"{au.YELLOW}wk 55%", line)
+  def test_rounds_half_up_like_omarchy(self):
+    self.assertEqual(au.render([claude(session=0.125)], NOW), f"claude {S1} 5h 13% ↻1h20m · {S1} wk 6%")
 
-  def test_stale_colour_is_dimmed_whole(self):
-    line = au.render([claude(session=0.85, updated=dt.timedelta(hours=-1))], NOW, color=True)
-    self.assertEqual(line, f"{au.DIM}claude* 5h 85% ↻1h20m · wk 6%{au.RESET}")
+  def test_dial_steps(self):
+    self.assertEqual(au.dial(0), au.DIAL_EMPTY)
+    self.assertEqual(au.dial(0.01), au.DIAL_SLICES[0])
+    self.assertEqual(au.dial(0.5), au.DIAL_SLICES[3])
+    self.assertEqual(au.dial(0.51), au.DIAL_SLICES[4])
+    self.assertEqual(au.dial(1.2), au.DIAL_SLICES[7])
 
   def test_durations(self):
     self.assertEqual(au.short_duration(30), "1m")
