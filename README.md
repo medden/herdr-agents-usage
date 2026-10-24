@@ -22,7 +22,9 @@ Omarchy (for the usage records and the `omarchy` command), herdr ≥ 0.9, and Py
 ## Install
 
 ```sh
-herdr plugin link /path/to/this/checkout
+git clone https://github.com/medden/herdr-agents-usage
+cd herdr-agents-usage
+herdr plugin link "$PWD"
 herdr plugin action invoke simrog.agent-usage.install
 ```
 
